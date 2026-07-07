@@ -4,5 +4,5 @@ return {
     name        = "mygame",
     fullname    = _("My Game"),
     description = _("Short description shown in the plugin manager."),
-    version     = "1.0.0",
+    version     = "1.0.1",
 }
