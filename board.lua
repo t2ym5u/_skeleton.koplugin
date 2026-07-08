@@ -1,7 +1,7 @@
 local UndoStack  = require("undo_stack")
 local grid_utils = require("grid_utils")
 local Timer      = require("timer")
-local _          = require("gettext")
+local _          = require("i18n")
 
 -- ---------------------------------------------------------------------------
 -- MyGameBoard — game state and logic
