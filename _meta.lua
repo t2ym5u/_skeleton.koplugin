@@ -3,5 +3,5 @@ local _ = require("gettext")
 return {
     fullname    = _("My Game"),
     description = _("Short description shown in the plugin manager."),
-    version     = "1.1.2",
+    version     = "1.1.3",
 }
