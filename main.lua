@@ -20,6 +20,12 @@ local MyGameScreen = lrequire("screen")
 -- ---------------------------------------------------------------------------
 
 local MyGamePlugin = PluginBase:extend{
+    -- MUST equal the plugin directory's basename (mygame -> mygame.koplugin).
+    -- Since KOReader 2026.03 (PR #15096) PluginLoader overwrites this with
+    -- the directory name unconditionally, so a mismatch does not just get
+    -- ignored: settings and stats end up keyed on a name this file never
+    -- mentions. Never put `name` in _meta.lua either -- it is deprecated
+    -- there and KOReader logs a warning and drops it.
     name      = "mygame",
     menu_text = _("My Game"),
     menu_hint = "tools",
