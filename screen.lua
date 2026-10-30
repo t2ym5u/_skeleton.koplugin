@@ -7,8 +7,6 @@ local function lrequire(name)
     return package.loaded[key]
 end
 
-local ButtonTable     = require("ui/widget/buttontable")
-local Device          = require("device")
 local FrameContainer  = require("ui/widget/container/framecontainer")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan  = require("ui/widget/horizontalspan")
@@ -26,7 +24,6 @@ local SettingsDialog  = require("settings_dialog")
 local MyGameBoard       = lrequire("board")
 local MyGameBoardWidget = lrequire("board_widget")
 
-local DeviceScreen = Device.screen
 
 -- ---------------------------------------------------------------------------
 -- MyGameScreen
@@ -57,83 +54,66 @@ end
 -- ---------------------------------------------------------------------------
 
 function MyGameScreen:buildLayout()
+    local is_landscape = self:isLandscape()
+
+    -- Title bar: the menu (left) holds everything that isn't played every
+    -- turn -- new game, difficulty, settings, rules.
+    local title_bar = self:buildTitleBar(_("My Game"), function()
+        return {
+            { text = _("New game"),                  callback = function() self:onNewGame() end },
+            { text = self:getDifficultyButtonText(), callback = function() self:openDifficultyMenu() end },
+            { text = _("Settings"),                  callback = function() self:openSettings() end },
+        }
+    end)
+
+    -- Controls: status line, then the action bar, both at controls width.
+    -- Use self:buildNumberPad(keys) for a digit/value pad, placed between them.
+    local action_bar = self:buildActionBar({
+        { id = "undo_button", text = _("Undo"),  callback = function() self:onUndo() end },
+        { text = _("Check"),  callback = function() self:onCheck() end },
+        { text = _("Reveal"), callback = function() self:onReveal() end },
+    })
+    self.undo_button = action_bar:getButtonById("undo_button")
+    self:updateUndoButton()
+
+    self.status_text:setMaxWidth(self:getControlsWidth())
+    local controls = VerticalGroup:new{
+        align = "center",
+        self.status_text,
+        VerticalSpan:new{ width = Size.span.vertical_large },
+        action_bar,
+    }
+
+    -- The board takes whatever the title bar and the controls leave.
+    local frame_pad = Size.padding.large
+    local budget_w, budget_h = self:getBoardBudget(title_bar, controls)
     self.board_widget = MyGameBoardWidget:new{
-        board            = self.board,
-        onCellSelected   = function(row, col, is_hold)
+        board          = self.board,
+        max_size       = math.min(budget_w, budget_h) - 2 * (frame_pad + Size.border.window),
+        onCellSelected = function(row, col, is_hold)
             self:onCellSelected(row, col, is_hold)
         end,
     }
-
-    local is_landscape  = self:isLandscape()
-    local sw            = DeviceScreen:getWidth()
-    local board_frame   = FrameContainer:new{
-        padding = Size.padding.large,
-        margin  = Size.margin.default,
+    local board_frame = FrameContainer:new{
+        padding = frame_pad,
+        margin  = 0,
         self.board_widget,
     }
 
-    local board_frame_size  = self.board_widget.size + (Size.padding.large + Size.margin.default) * 2
-    local right_panel_width = sw - board_frame_size - Size.span.horizontal_default
-    local button_width = is_landscape
-        and math.max(right_panel_width - Size.span.horizontal_default, 100)
-        or  math.floor(sw * 0.9)
-
-    -- Top action bar
-    local top_buttons = ButtonTable:new{
-        shrink_unneeded_width = true,
-        width   = button_width,
-        buttons = {
-            {
-                { text = _("New game"),  callback = function() self:onNewGame() end },
-                { id = "diff_button",    text = self:getDifficultyButtonText(),
-                  callback = function() self:openDifficultyMenu() end },
-                { text = _("Settings"),  callback = function() self:openSettings() end },
-                self:makeCloseButtonConfig(),
-            },
-        },
-    }
-    self.diff_button = top_buttons:getButtonById("diff_button")
-
-    -- Bottom action bar
-    local bottom_buttons = ButtonTable:new{
-        shrink_unneeded_width = true,
-        width   = button_width,
-        buttons = {
-            {
-                { id = "undo_button", text = _("Undo"),  callback = function() self:onUndo() end },
-                { text = _("Check"),  callback = function() self:onCheck() end },
-                { text = _("Reveal"), callback = function() self:onReveal() end },
-            },
-        },
-    }
-    self.undo_button = bottom_buttons:getButtonById("undo_button")
-    self:updateUndoButton()
-
     if is_landscape then
-        local right_panel = VerticalGroup:new{
-            align = "center",
-            top_buttons,
-            VerticalSpan:new{ width = Size.span.vertical_large },
-            self.status_text,
-            VerticalSpan:new{ width = Size.span.vertical_large },
-            bottom_buttons,
-        }
-        self.layout = HorizontalGroup:new{
+        self:buildLandscapeLayout(title_bar, HorizontalGroup:new{
             align = "center",
             board_frame,
-            HorizontalSpan:new{ width = Size.span.horizontal_default },
-            right_panel,
-        }
+            HorizontalSpan:new{ width = self:getGutter() },
+            controls,
+        })
     else
-        local content = VerticalGroup:new{
+        self:buildPortraitLayout(title_bar, board_frame, VerticalGroup:new{
             align = "center",
-            board_frame,
-            VerticalSpan:new{ width = Size.span.vertical_large },
-            self.status_text,
-        }
-        self:buildPortraitLayout(top_buttons, content, bottom_buttons)
+            controls,
+            VerticalSpan:new{ width = self:getGutter() },
+        })
     end
-    self[1] = self.layout
     self:updateStatus()
 end
 
@@ -256,9 +236,12 @@ function MyGameScreen:updateStatus(message)
     if message then
         status = message
     else
+        -- Status parts go through joinStatus so every game separates them
+        -- the same way: size · difficulty · progress.
         local diff  = self.plugin:getSetting("difficulty", "easy")
-        local label = MenuHelper.DIFFICULTY_LABELS[diff] or diff
-        status = T(_("Difficulty: %1"), label)
+        status = self:joinStatus(
+            T("%1×%2", self.board.cols, self.board.rows),
+            MenuHelper.DIFFICULTY_LABELS[diff] or diff)
         if self.board:isSolved() then
             status = _("Congratulations! Puzzle solved.")
         end
